@@ -29,20 +29,6 @@ void solve(string protein, unordered_map<char, int>& length, map<string, int>& f
     return;
 }
 
-// Function to check if the sequence only contains valid amino acids
-bool checkSequence(string protein, string aa) {
-    for (int i = 0; i < protein.size(); i++) {
-        bool ans = false;
-        for (int j = 0; j < aa.size(); j++) {
-            if (protein[i] == aa[j]) {
-                ans = true;
-            }
-        }
-        if (!ans) return false;
-    }
-    return true;
-}
-
 int main() {
     // Valid amino acid characters
     string aa = "ACDEFGHIKLMNPQRSTVWY";
@@ -52,7 +38,7 @@ int main() {
     map<string, int> freq;
 
     // File handling to read the CSV file
-    ifstream file("protein_data.csv");  // Open the CSV file
+    ifstream file("protein_data3.csv");  // Open the CSV file
     if (!file.is_open()) {
         cout << "Error: Could not open the file!" << endl;
         return 1;
@@ -69,10 +55,18 @@ int main() {
     while (getline(file, line)) {
         stringstream ss(line);
         string id, seq;
-        getline(ss, id, ',');   // First column is ID (ignore)
-        getline(ss, seq, ',');  // Second column is the protein sequence
+        
+        // Read and ignore the first column (ID) 
+        getline(ss, id, ',');  
+        
+        // Read the second column (sequence) and remove quotes
+        getline(ss, seq, ',');  
+        seq.erase(remove(seq.begin(), seq.end(), '\"'), seq.end()); // Remove quotes
+        seq.erase(remove(seq.begin(), seq.end(), ' '), seq.end()); // Remove spaces if any
+
         sequences.push_back(seq);
     }
+
     file.close();  // Close the file after reading
 
     int t = sequences.size();  // Total number of protein sequences
@@ -83,13 +77,6 @@ int main() {
     while (curr < t) {
         protein = sequences[curr];
         curr++;
-
-        // Validate the protein sequence
-        if (checkSequence(protein, aa) == false) {
-            cout << "Wrong Protein Sequence Inserted. Program Terminated." << endl;
-            print = false;
-            break;
-        }
 
         // Analyze the protein sequence
         solve(protein, length, freq);
