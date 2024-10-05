@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <fstream>   // For file I/O
 #include <sstream>   // For string stream to parse CSV lines
-#include <hpdf.h>    // Haru PDF Library
+#include <xlsxwriter.h>   // Library to write Excel files
 
 using namespace std;
 
@@ -27,31 +27,6 @@ void solve(string protein, map<string, int>& freq) {
         }
         i--;  // Move back to the last character of the current repeat
     }
-}
-
-void writeToPDF(HPDF_Page& page, const string& entry_id, const string& protein_name, const map<string, int>& freq, float& text_pos_y) {
-    // Write protein entry ID and name to PDF
-    string header = "Entry: " + entry_id + ", Protein: " + protein_name;
-    HPDF_Page_BeginText(page);
-    HPDF_Page_TextOut(page, 50, text_pos_y, header.c_str());
-    HPDF_Page_EndText(page);
-    text_pos_y -= 20;
-
-    // Write repeated sequences
-    for (const auto& i : freq) {
-        string aa = i.first;
-        string text = aa + ": " + to_string(i.second) + " times repeated";
-        HPDF_Page_BeginText(page);
-        HPDF_Page_TextOut(page, 50, text_pos_y, text.c_str());
-        HPDF_Page_EndText(page);
-        text_pos_y -= 20;
-    }
-
-    // Add a separator
-    HPDF_Page_BeginText(page);
-    HPDF_Page_TextOut(page, 50, text_pos_y, "-----------------------");
-    HPDF_Page_EndText(page);
-    text_pos_y -= 30;
 }
 
 int main() {
@@ -92,25 +67,37 @@ int main() {
 
     file.close();  // Close the file after reading
 
-    // Initialize PDF document
-    HPDF_Doc pdf = HPDF_New(NULL, NULL);
-    if (!pdf) {
-        cout << "Error: Cannot create PDF file." << endl;
-        return 1;
+    // Initialize Excel workbook
+    lxw_workbook  *workbook  = workbook_new("protein_repeat_results.xlsx");
+    lxw_worksheet *worksheet = workbook_add_worksheet(workbook, NULL);
+
+    // Write headers: Entry ID, Protein Name, and Homorepeats
+    int row = 1;  // Starting row (row 0 is for headers)
+    int col = 1;  // Starting column (column 0 is for protein names)
+
+    // Map to store unique homorepeats across all proteins
+    set<string> homorepeats;
+
+    // First, gather all possible homorepeats from the data
+    for (const auto& tuple : sequences) {
+        const string& protein = get<2>(tuple);  // Get sequence
+        map<string, int> freq;
+        solve(protein, freq);  // Analyze the protein sequence
+
+        for (const auto& i : freq) {
+            homorepeats.insert(i.first);  // Insert unique homorepeats
+        }
     }
 
-    // Add a new page to the PDF document
-    HPDF_Page page = HPDF_AddPage(pdf);
-    HPDF_Page_SetSize(page, HPDF_PAGE_SIZE_A4, HPDF_PAGE_PORTRAIT);
+    // Write homorepeat headers to the Excel sheet
+    worksheet_write_string(worksheet, 0, 0, "Entry ID", NULL);
+    worksheet_write_string(worksheet, 0, 1, "Protein Name", NULL);
+    col = 2;  // Start from the third column for homorepeats
+    for (const string& repeat : homorepeats) {
+        worksheet_write_string(worksheet, 0, col++, repeat.c_str(), NULL);
+    }
 
-    // Set font and text size
-    HPDF_Font font = HPDF_GetFont(pdf, "Helvetica", NULL);
-    HPDF_Page_SetFontAndSize(page, font, 12);
-
-    float page_height = HPDF_Page_GetHeight(page);
-    float text_pos_y = page_height - 40;  // Start writing from the top of the page
-
-    // Loop through sequences and add content to the PDF
+    // Write each protein and its corresponding repeat counts
     for (const auto& tuple : sequences) {
         const string& entry_id = get<0>(tuple);  // Get entry ID
         const string& protein_name = get<1>(tuple);  // Get protein name
@@ -120,25 +107,28 @@ int main() {
         map<string, int> freq;
         solve(protein, freq);  // Analyze the protein sequence
 
-        writeToPDF(page, entry_id, protein_name, freq, text_pos_y);
+        // Write entry ID and protein name
+        worksheet_write_string(worksheet, row, 0, entry_id.c_str(), NULL);
+        worksheet_write_string(worksheet, row, 1, protein_name.c_str(), NULL);
 
-        // Check if we need a new page
-        if (text_pos_y < 50) {
-            page = HPDF_AddPage(pdf);
-            HPDF_Page_SetSize(page, HPDF_PAGE_SIZE_A4, HPDF_PAGE_PORTRAIT);
-            HPDF_Page_SetFontAndSize(page, font, 12);
-            text_pos_y = page_height - 40;  // Reset position for new page
+        // Write homorepeat frequencies for this protein
+        col = 2;  // Reset column for homorepeats
+        for (const string& repeat : homorepeats) {
+            if (freq.find(repeat) != freq.end()) {
+                worksheet_write_number(worksheet, row, col, freq[repeat], NULL);
+            } else {
+                worksheet_write_number(worksheet, row, col, 0, NULL);  // No repeats of this type
+            }
+            col++;
         }
+
+        row++;  // Move to the next row for the next protein
     }
 
-    // Save the PDF to a file
-    HPDF_SaveToFile(pdf, "protein_repeat_results.pdf");
+    // Close the workbook and save
+    workbook_close(workbook);
 
-    // Clean up and close PDF
-    HPDF_Free(pdf);
-
-    cout << "PDF results saved as 'protein_repeat_results.pdf'. You can download it now." << endl;
+    cout << "Excel results saved as 'protein_repeat_results.xlsx'. You can download it now." << endl;
 
     return 0;
 }
-
